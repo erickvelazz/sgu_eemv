@@ -1,51 +1,47 @@
 pipeline {
-  agent any
-  environment {
+    agent any
+
+    environment {
         PATH = "/usr/local/bin:${env.PATH}"
     }
 
-  stages {
-    stage('Checkout SCM') {
-      steps {
-        checkout scm
-      }
-    }
+    stages {
 
-    stage('Parando servicios') {
-      steps {
-        sh 'docker compose down || true'
-      }
-    }
+        stage('Checkout SCM') {
+            steps {
+                checkout scm
+            }
+        }
 
-    stage('Eliminadno imagenes antiguas...') {
-        steps {
-            sh '''
-                IMAGES=$(docker images --filter "label=com.docker.compose.project=demo" -q)
-                if [ -n "$IMAGES" ]; then
-                   docker rmi -f $IMAGES
-                else
-                   echo "No hay images por borrar"
-                fi
-            '''
+        stage('Parando servicios') {
+            steps {
+                sh 'docker compose down || true'
+            }
+        }
+
+        stage('Eliminando imágenes antiguas') {
+            steps {
+                sh '''
+                    IMAGES=$(docker images --filter "label=com.docker.compose.project=demo" -q)
+                    if [ -n "$IMAGES" ]; then
+                        docker rmi -f $IMAGES
+                    else
+                        echo "No hay imágenes por borrar"
+                    fi
+                '''
+            }
+        }
+
+        stage('Contruyendo y desplegando') {
+            steps {
+                sh 'docker compose up --build -d'
+            }
         }
     }
 
-    stage('Descargando actualizacion...') {
-        steps {
-            checkout scm 
-        }
+    post {
+        always { echo 'Pipeline finalizada.' }
+        success { echo 'OK.' }
+        failure { echo 'Falló.' }
     }
-
-    stage('Construyendo y desplegando') {
-      steps {
-        sh 'docker compose up --build -d'
-      }
-    }
-  }
-
-  post {
-    always { echo 'Pipeline finalizada.' }
-    success { echo 'OK.' }
-    failure { echo 'Falló.' }
-  }
 }
