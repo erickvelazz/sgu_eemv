@@ -1,0 +1,110 @@
+services:
+  database:
+    image: mysql:8
+    container_name: sgu-database
+    environment:
+      MYSQL_ROOT_PASSWORD: root1234
+      MYSQL_DATABASE: sgu_demo
+    ports:
+      - "3307:3306"
+    volumes:
+      - sgu-volume:/var/lib/mysql
+    networks:
+      - sgu-net
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -proot || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  frontend:
+    image: client:1.0-sgu
+    build:
+      context: ./client
+      args:
+        API_HOST: localhost
+        API_PORT: 8443
+        API_BASE: /sgu-api
+        API_PROTOCOL: https
+    container_name: sgu-frontend
+    ports:
+      - "80:80"
+      - "3443:443"
+    networks:
+      - sgu-net
+    volumes:
+      - certbot-conf:/etc/letsencrypt:ro
+    depends_on:
+      - database
+      - certbot
+    restart: unless-stopped
+
+  backend:
+    image: server:1.0-sgu
+    build:
+      context: ./server
+    container_name: sgu-backend
+    environment:
+      SERVER_PORT: 8080
+      SERVER_SERVLET_CONTEXT_PATH: /sgu-api
+      DB_HOST: database
+      DB_PORT: 3306
+      DB_USER: root
+      DB_PASSWORD: root1234
+      DB_NAME: sgu_demo
+      SERVER_SSL_ENABLED: true
+      SERVER_SSL_CERT: /etc/letsencrypt/live/localhost/fullchain.pem
+      SERVER_SSL_CERT_KEY: /etc/letsencrypt/live/localhost/privkey.pem
+
+    ports:
+      - "8443:8080"
+    networks:
+      - sgu-net
+    volumes:
+      - certbot-conf:/etc/letsencrypt:ro
+    depends_on:
+      database:
+        condition: service_healthy
+      certbot:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-check-certificate -qO- https://localhost:8080/actuator/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  certbot:
+    image: certbot/certbot:latest
+    container_name: certbot
+    restart: always
+    volumes:
+      - certbot-conf:/etc/letsencrypt
+    entrypoint: >
+      sh -c '
+        set -e;
+        echo "Verificando certificados existentes...";
+        if [ ! -f /etc/letsencrypt/live/localhost/fullchain.pem ]; then
+          echo "Generando certificado de prueba...";
+          mkdir -p /etc/letsencrypt/live/localhost;
+          apk add --no-cache openssl || true;
+          openssl req -x509 -nodes -days 365 \
+            -newkey rsa:2048 \
+            -keyout /etc/letsencrypt/live/localhost/privkey.pem \
+            -out /etc/letsencrypt/live/localhost/fullchain.pem \
+            -subj "/CN=localhost";
+        fi;
+        echo "Listo";
+        tail -f /dev/null
+      '
+
+volumes:
+  sgu-volume:
+    external: true
+  certbot-conf:
+    external: true
+
+networks:
+  sgu-net:
+    external: true
