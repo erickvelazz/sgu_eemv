@@ -37,7 +37,7 @@ services:
       - certbot-conf:/etc/letsencrypt:ro
     depends_on:
       - database
-      #- certbot
+      - certbot
     restart: unless-stopped
 
   backend:
@@ -77,7 +77,7 @@ services:
 
   certbot:
     image: certbot/certbot:latest
-    container_name: certbot
+    #container_name: certbot
     restart: always
     volumes:
       - certbot-conf:/etc/letsencrypt
